@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/gliderlabs/logspout/adapters/raw"
 	"github.com/gliderlabs/logspout/router"
+	"crypto/tls"
+	"log"
 )
 
 func init() {
@@ -79,7 +82,29 @@ func (c *httpConnection) SetWriteDeadline(t time.Time) error {
 }
 
 func (t *httpTransport) Dial(addr string, options map[string]string) (net.Conn, error) {
-	client := &http.Client{ Transport: &http.Transport{ IdleConnTimeout: 1 * time.Hour }}
-	conn := &httpConnection { client, "https://" + addr + "/", options["http.user"], options["http.pass"] }
+	client := getClient(options)
+	conn := &httpConnection{client, "https://" + addr + "/", options["http.user"], options["http.pass"]}
 	return conn, nil
+}
+
+func getClient(options map[string]string) *http.Client {
+	if pemFile, ok := options["http.ca"]; ok {
+		caCert, err := ioutil.ReadFile(pemFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		tlsConfig := &tls.Config{
+			RootCAs: caCertPool,
+		}
+		tlsConfig.BuildNameToCertificate()
+		transport := &http.Transport{TLSClientConfig: tlsConfig, IdleConnTimeout: 1 * time.Hour}
+		return &http.Client{Transport: transport}
+	} else {
+		transport := &http.Transport{IdleConnTimeout: 1 * time.Hour}
+		return &http.Client{Transport: transport}
+	}
 }
