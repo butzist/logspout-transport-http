@@ -2,19 +2,19 @@ package http
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
-	"io/ioutil"
-	"io"
 	"time"
 
 	"github.com/gliderlabs/logspout/adapters/raw"
 	"github.com/gliderlabs/logspout/router"
-	"crypto/tls"
-	"log"
-	"fmt"
 )
 
 func init() {
@@ -31,23 +31,25 @@ func rawHTTPAdapter(route *router.Route) (router.LogAdapter, error) {
 type httpTransport int
 type httpConnection struct {
 	client *http.Client
-	url string
-	user string
-	pass string
+	url    string
+	user   string
+	pass   string
 }
 
-func (c *httpConnection) Read(b [] byte) (n int, err error) {
+func (c *httpConnection) Read(b []byte) (n int, err error) {
 	return 0, errors.New("Not implemented")
 }
 
-func (c *httpConnection) Write(b [] byte) (n int, err error) {
+func (c *httpConnection) Write(b []byte) (n int, err error) {
 	req, err := http.NewRequest(http.MethodPost, c.url, bytes.NewReader(b))
 	if err != nil {
 		return 0, err
 	}
 
 	req.Header.Add("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.pass)
+	if c.user != "" {
+		req.SetBasicAuth(c.user, c.pass)
+	}
 
 	res, err := c.client.Do(req)
 	if err != nil {
@@ -99,7 +101,11 @@ func getClient(options map[string]string) *http.Client {
 		log.Fatalf("Error during TLS handshake: %s\n", err.Error())
 	}
 
-	transport := &http.Transport{TLSClientConfig: tlsConfig, IdleConnTimeout: 1 * time.Hour}
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+		IdleConnTimeout: 1 * time.Hour,
+		Proxy:           http.ProxyFromEnvironment,
+	}
 	return &http.Client{Transport: transport}
 }
 
