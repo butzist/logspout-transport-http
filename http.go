@@ -19,8 +19,10 @@ import (
 
 func init() {
 	router.AdapterTransports.Register(new(httpTransport), "http")
+	router.AdapterTransports.Register(new(httpsTransport), "https")
 	// convenience adapters around raw adapter
 	router.AdapterFactories.Register(rawHTTPAdapter, "http")
+	router.AdapterFactories.Register(rawHTTPSAdapter, "https")
 }
 
 func rawHTTPAdapter(route *router.Route) (router.LogAdapter, error) {
@@ -28,7 +30,13 @@ func rawHTTPAdapter(route *router.Route) (router.LogAdapter, error) {
 	return raw.NewRawAdapter(route)
 }
 
+func rawHTTPSAdapter(route *router.Route) (router.LogAdapter, error) {
+	route.Adapter = "raw+https"
+	return raw.NewRawAdapter(route)
+}
+
 type httpTransport int
+type httpsTransport int
 type httpConnection struct {
 	client *http.Client
 	url    string
@@ -90,13 +98,23 @@ func (c *httpConnection) SetWriteDeadline(t time.Time) error {
 }
 
 func (t *httpTransport) Dial(addr string, options map[string]string) (net.Conn, error) {
+	return Dial(addr, "http", options)
+}
+
+func (t *httpsTransport) Dial(addr string, options map[string]string) (net.Conn, error) {
+	return Dial(addr, "https", options)
+}
+
+func Dial(addr string, protocol string, options map[string]string) (net.Conn, error) {
 	client := getClient(options)
-	protocol, ok := options["http.proto"]
+	path, ok := options["http.path"]
 	if !ok {
-		protocol = "https"
+		path = "/"
+	} else if path[0] != '/' {
+		path = "/" + path
 	}
 
-	conn := &httpConnection{client, fmt.Sprintf("%s://%s/", protocol, addr), options["http.user"], options["http.pass"]}
+	conn := &httpConnection{client, fmt.Sprintf("%s://%s%s", protocol, addr, path), options["http.user"], options["http.pass"]}
 	return conn, nil
 }
 
