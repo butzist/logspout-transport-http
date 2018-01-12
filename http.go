@@ -57,7 +57,12 @@ func (c *httpConnection) Write(b []byte) (n int, err error) {
 	}
 
 	io.Copy(ioutil.Discard, res.Body)
-	return len(b), res.Body.Close()
+
+	if res.StatusCode > 200 {
+		return 0, errors.New(fmt.Sprintf("HTTP endpoint returned status code %s", res.StatusCode))
+	} else {
+		return len(b), res.Body.Close()
+	}
 }
 
 func (c *httpConnection) Close() error {
